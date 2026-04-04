@@ -1,8 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -16,7 +16,7 @@ import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { api } from '@/lib/api';
-import type { Restaurant } from '@/lib/api';
+import type { NearbyRestaurant } from '@/lib/api';
 import { useTheme } from '@/providers/ThemeProvider';
 
 export default function Step1Screen(): React.JSX.Element {
@@ -25,12 +25,20 @@ export default function Step1Screen(): React.JSX.Element {
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [restaurantName, setRestaurantName] = useState('');
-  const [suggestions, setSuggestions] = useState<Restaurant[]>([]);
+  const [suggestions, setSuggestions] = useState<NearbyRestaurant[]>([]);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const userCoords = useRef<{ lat: number; lng: number } | null>(null);
 
-  const [menuItems, setMenuItems] = useState<string[]>([]);
-  const [isFetchingMenus, setIsFetchingMenus] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        userCoords.current = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+      }
+    })();
+  }, []);
 
   const pickImage = async (): Promise<void> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -74,11 +82,11 @@ export default function Step1Screen(): React.JSX.Element {
   const handleRestaurantChange = async (text: string): Promise<void> => {
     setRestaurantName(text);
     setShowSuggestions(text.length > 1);
-    setMenuItems([]);
     if (text.length > 1) {
       setIsFetchingSuggestions(true);
       try {
-        const data = await api.getRestaurants(text);
+        const coords = userCoords.current;
+        const data = await api.searchNearbyRestaurants(text, coords?.lat, coords?.lng);
         setSuggestions(data);
       } catch {
         setSuggestions([]);
@@ -94,32 +102,6 @@ export default function Step1Screen(): React.JSX.Element {
     setRestaurantName(name);
     setShowSuggestions(false);
     setSuggestions([]);
-    void fetchMenusForRestaurant(name);
-  };
-
-  const fetchMenusForRestaurant = async (name: string): Promise<void> => {
-    setIsFetchingMenus(true);
-    setMenuItems([]);
-    try {
-      const menus = await api.getRestaurantMenus(name);
-      setMenuItems(menus);
-    } catch {
-      setMenuItems([]);
-    } finally {
-      setIsFetchingMenus(false);
-    }
-  };
-
-  const selectMenuItem = (menuName: string): void => {
-    if (imageUri === null) {
-      Alert.alert('Photo required', 'Please select or take a photo of your meal first.');
-      return;
-    }
-    // Skip Step 2 (AI photo detection) — go directly to Step 3 with the chosen menu
-    router.push({
-      pathname: '/log/step3',
-      params: { imageUri, restaurantName, menuName, sessionId: '' },
-    });
   };
 
   const handleNext = (): void => {
@@ -226,14 +208,17 @@ export default function Step1Screen(): React.JSX.Element {
               { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
             ]}
           >
-            {suggestions.map((restaurant) => (
+            {suggestions.map((restaurant, idx) => (
               <Pressable
-                key={restaurant.id}
+                key={`${restaurant.name}-${idx}`}
                 onPress={() => { selectSuggestion(restaurant.name); }}
                 style={[styles.suggestionItem, { borderBottomColor: theme.colors.border }]}
               >
                 <Text variant="body" style={{ color: theme.colors.text }}>
                   {restaurant.name}
+                </Text>
+                <Text variant="caption" style={{ color: `${theme.colors.text}66`, marginTop: 2 }} numberOfLines={1}>
+                  {restaurant.address}
                 </Text>
               </Pressable>
             ))}
@@ -245,46 +230,6 @@ export default function Step1Screen(): React.JSX.Element {
           </Text>
         )}
       </Card>
-
-      {/* AI-discovered menu items via grounded search */}
-      {(isFetchingMenus || menuItems.length > 0) && (
-        <Card style={{ marginBottom: theme.spacing.md }}>
-          <Text variant="h2" style={[styles.label, { color: theme.colors.text }]}>
-            Menu Items
-          </Text>
-          <Text variant="caption" style={{ color: `${theme.colors.text}66`, marginBottom: 8 }}>
-            Tap a dish to skip photo detection
-          </Text>
-          {isFetchingMenus ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-              <Text variant="caption" style={{ color: `${theme.colors.text}66`, marginLeft: 8 }}>
-                Searching menus...
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.menuGrid}>
-              {menuItems.map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => { selectMenuItem(item); }}
-                  style={[
-                    styles.menuChip,
-                    {
-                      backgroundColor: `${theme.colors.primary}22`,
-                      borderColor: `${theme.colors.primary}66`,
-                    },
-                  ]}
-                >
-                  <Text variant="caption" style={{ color: theme.colors.primary }}>
-                    {item}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </Card>
-      )}
 
       <Button
         title="Next →"
@@ -346,21 +291,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  menuGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  menuChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
   },
 });

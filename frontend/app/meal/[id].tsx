@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -14,6 +15,8 @@ export default function MealDetailScreen(): React.JSX.Element {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const meals = useMealStore((s) => s.meals);
+  const deleteMeal = useMealStore((s) => s.deleteMeal);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const meal = meals.find((m) => String(m.id) === id);
 
@@ -41,6 +44,26 @@ export default function MealDetailScreen(): React.JSX.Element {
   });
 
   const stars = [1, 2, 3, 4, 5];
+
+  const handleDelete = (): void => {
+    Alert.alert('Delete Meal', 'Are you sure you want to delete this entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setIsDeleting(true);
+          try {
+            await deleteMeal(meal.id);
+            router.replace('/(tabs)');
+          } catch {
+            Alert.alert('Error', 'Failed to delete meal.');
+            setIsDeleting(false);
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <Screen scroll padding>
@@ -139,6 +162,14 @@ export default function MealDetailScreen(): React.JSX.Element {
           </View>
         </Card>
       )}
+
+      <Button
+        title="Delete Entry"
+        onPress={handleDelete}
+        variant="outline"
+        loading={isDeleting}
+        disabled={isDeleting}
+      />
     </Screen>
   );
 }

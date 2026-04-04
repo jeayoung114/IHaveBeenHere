@@ -8,5 +8,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     API_URL: process.env.API_URL ?? 'http://localhost:8000',
     APP_ENV: process.env.APP_ENV ?? 'development',
   },
-  plugins: ['expo-router', 'expo-secure-store', 'expo-font', 'expo-image-picker'],
+  plugins: ['expo-router', 'expo-secure-store', 'expo-font', 'expo-image-picker', 'expo-location'],
 });

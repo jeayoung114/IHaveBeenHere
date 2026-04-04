@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Camera, MapPin, Search, User, UtensilsCrossed } from 'lucide-react-native';
+import { Camera, MapPin, Search, Settings, UtensilsCrossed } from 'lucide-react-native';
 import { View, StyleSheet, Pressable } from 'react-native';
 
 import { useTheme } from '@/providers/ThemeProvider';
@@ -73,10 +73,11 @@ export default function TabLayout(): React.JSX.Element {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <User size={24} color={color} />,
+          title: 'Settings',
+          tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
         }}
       />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }

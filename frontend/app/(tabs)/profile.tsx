@@ -26,7 +26,7 @@ export default function ProfileScreen(): React.JSX.Element {
   return (
     <Screen scroll padding>
       <Text variant="h1" style={[styles.heading, { color: theme.colors.text }]}>
-        PROFILE
+        SETTINGS
       </Text>
 
       <Card style={{ marginBottom: theme.spacing.md }}>

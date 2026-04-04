@@ -19,6 +19,7 @@ interface MealState {
   stats: MealStats;
   fetchMeals: () => Promise<void>;
   addMeal: (meal: Meal) => void;
+  deleteMeal: (id: number) => Promise<void>;
 }
 
 const DEFAULT_STATS: MealStats = {
@@ -51,6 +52,16 @@ export const useMealStore = create<MealState>()(
             total_meals: state.stats.total_meals + 1,
           },
         })),
+      deleteMeal: async (id: number) => {
+        await api.deleteMeal(id);
+        set((state) => ({
+          meals: state.meals.filter((m) => m.id !== id),
+          stats: {
+            ...state.stats,
+            total_meals: Math.max(0, state.stats.total_meals - 1),
+          },
+        }));
+      },
     }),
     {
       name: 'meal-store',

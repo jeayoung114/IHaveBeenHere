@@ -1,6 +1,7 @@
 import json
 import uuid
 import os
+import httpx
 from typing import Optional
 from pathlib import Path
 
@@ -38,6 +39,22 @@ async def _save_image(image: UploadFile) -> str:
     return str(file_path)
 
 
+async def _geocode(name: str) -> tuple[float, float] | None:
+    """Look up lat/lng for a restaurant name via Nominatim (OpenStreetMap)."""
+    try:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {"q": name, "format": "json", "limit": 1}
+        headers = {"User-Agent": "IHaveBeenHere/1.0"}
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(url, params=params, headers=headers)
+            data = r.json()
+            if data:
+                return float(data[0]["lat"]), float(data[0]["lon"])
+    except Exception:
+        pass
+    return None
+
+
 async def _get_or_create_restaurant(db: AsyncSession, name: str) -> Restaurant:
     """Return existing restaurant by name or create a new one."""
     result = await db.execute(
@@ -45,7 +62,12 @@ async def _get_or_create_restaurant(db: AsyncSession, name: str) -> Restaurant:
     )
     restaurant = result.scalars().first()
     if not restaurant:
-        restaurant = Restaurant(name=name)
+        coords = await _geocode(name)
+        restaurant = Restaurant(
+            name=name,
+            latitude=coords[0] if coords else None,
+            longitude=coords[1] if coords else None,
+        )
         db.add(restaurant)
         await db.flush()
     return restaurant

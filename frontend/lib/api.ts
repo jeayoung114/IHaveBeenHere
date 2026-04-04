@@ -2,6 +2,20 @@ import { env } from './env';
 
 const BASE_URL = env.API_URL;
 
+// ngrok free tier injects a browser warning page for non-browser requests.
+// This header bypasses it.
+const BASE_HEADERS: Record<string, string> = {
+  'ngrok-skip-browser-warning': '1',
+};
+
+export interface NearbyRestaurant {
+  name: string;
+  display_name: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+
 export interface Restaurant {
   id: number;
   name: string;
@@ -51,7 +65,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const api = {
   getMeals: (skip = 0, limit = 20): Promise<MealsResponse> =>
-    fetch(`${BASE_URL}/meals?skip=${skip}&limit=${limit}`).then((r) =>
+    fetch(`${BASE_URL}/meals?skip=${skip}&limit=${limit}`, { headers: BASE_HEADERS }).then((r) =>
       handleResponse<MealsResponse>(r),
     ),
 
@@ -69,6 +83,7 @@ export const api = {
     }
     const response = await fetch(`${BASE_URL}/meals/detect-menu`, {
       method: 'POST',
+      headers: BASE_HEADERS,
       body: form,
     });
     return handleResponse<DetectMenuResponse>(response);
@@ -83,7 +98,7 @@ export const api = {
   ): Promise<GenerateReviewsResponse> =>
     fetch(`${BASE_URL}/meals/generate-reviews`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...BASE_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         menu_name: menuName,
         restaurant_name: restaurantName,
@@ -94,12 +109,12 @@ export const api = {
     }).then((r) => handleResponse<GenerateReviewsResponse>(r)),
 
   createMeal: (formData: FormData): Promise<Meal> =>
-    fetch(`${BASE_URL}/meals`, { method: 'POST', body: formData }).then((r) =>
+    fetch(`${BASE_URL}/meals`, { method: 'POST', headers: BASE_HEADERS, body: formData }).then((r) =>
       handleResponse<Meal>(r),
     ),
 
   searchMeals: (q: string): Promise<Meal[]> =>
-    fetch(`${BASE_URL}/search?q=${encodeURIComponent(q)}`).then((r) =>
+    fetch(`${BASE_URL}/search?q=${encodeURIComponent(q)}`, { headers: BASE_HEADERS }).then((r) =>
       handleResponse<Meal[]>(r),
     ),
 
@@ -107,7 +122,13 @@ export const api = {
     const url = name
       ? `${BASE_URL}/restaurants?name=${encodeURIComponent(name)}`
       : `${BASE_URL}/restaurants`;
-    return fetch(url).then((r) => handleResponse<Restaurant[]>(r));
+    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<Restaurant[]>(r));
+  },
+
+  searchNearbyRestaurants: (q: string, lat?: number, lng?: number): Promise<NearbyRestaurant[]> => {
+    let url = `${BASE_URL}/restaurants/search-nearby?q=${encodeURIComponent(q)}`;
+    if (lat != null && lng != null) url += `&lat=${lat}&lng=${lng}`;
+    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<NearbyRestaurant[]>(r));
   },
 
   getRestaurantMenus: (restaurantName: string, sessionId?: string): Promise<string[]> => {
@@ -115,6 +136,16 @@ export const api = {
     if (sessionId) {
       url += `&session_id=${encodeURIComponent(sessionId)}`;
     }
-    return fetch(url).then((r) => handleResponse<string[]>(r));
+    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<string[]>(r));
   },
+
+  deleteMeal: (id: number): Promise<void> =>
+    fetch(`${BASE_URL}/meals/${id}`, { method: 'DELETE', headers: BASE_HEADERS }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    }),
+
+  geocodeAllRestaurants: (): Promise<{ updated: number; total: number }> =>
+    fetch(`${BASE_URL}/restaurants/geocode-all`, { method: 'POST', headers: BASE_HEADERS }).then(
+      (r) => handleResponse<{ updated: number; total: number }>(r),
+    ),
 };

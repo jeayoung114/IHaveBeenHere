@@ -1,3 +1,4 @@
+import base64
 import os
 import jwt
 from fastapi import Header, HTTPException
@@ -5,7 +6,12 @@ from fastapi import Header, HTTPException
 
 def get_current_user_id(authorization: str = Header(...)) -> str:
     """Extract and verify Supabase JWT, return user UUID."""
-    secret = os.environ.get("SUPABASE_JWT_SECRET", "")
+    secret_str = os.environ.get("SUPABASE_JWT_SECRET", "")
+    try:
+        # Supabase JWT secret is base64-encoded; decode to raw bytes
+        secret = base64.b64decode(secret_str)
+    except Exception:
+        secret = secret_str.encode()
     try:
         token = authorization.replace("Bearer ", "")
         payload = jwt.decode(

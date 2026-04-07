@@ -33,9 +33,15 @@ module.exports = {
       output: 'static',
       favicon: './assets/images/favicon.png',
     },
-    plugins: ['expo-router', 'expo-secure-store'],
+    plugins: ['expo-router', 'expo-secure-store', 'expo-updates'],
     experiments: {
       typedRoutes: true,
+    },
+    updates: {
+      url: 'https://u.expo.dev/8a231e7e-1a01-4e8a-9b37-c983cb018a6e',
+    },
+    runtimeVersion: {
+      policy: 'appVersion',
     },
     extra: {
       API_URL: process.env.API_URL ?? 'https://ihavebeenhere-production.up.railway.app',

@@ -11,6 +11,7 @@ An AI-powered food journal app. Take a photo of your meal, let AI identify the d
 3. **Rate & review** — pick 1–5 stars; AI generates 4 personalized review suggestions based on the photo and rating
 4. **Save to journal** — your meal is logged with photo, restaurant, rating, and review
 5. **Browse your timeline** — scroll through your food history with stats, search, and full detail views
+6. **Search by date** — filter your journal with a range calendar picker
 
 ---
 
@@ -28,7 +29,8 @@ An AI-powered food journal app. Take a photo of your meal, let AI identify the d
 | Layer | Technology |
 |---|---|
 | API Framework | FastAPI (Python) |
-| Database | SQLite + SQLAlchemy (async) |
+| Database | Supabase PostgreSQL + SQLAlchemy (async) |
+| Image Storage | Supabase Storage |
 | AI Model | Google Gemini 2.5 Flash |
 | AI Grounding | Google Search (real-time web) |
 | Agent Framework | Google ADK |
@@ -85,10 +87,10 @@ IHaveBeenHere/
     ├── app/
     │   ├── (tabs)/
     │   │   ├── index.tsx                # Timeline (home feed)
-    │   │   ├── search.tsx               # Full-text search
+    │   │   ├── search.tsx               # Search + date range filter
     │   │   ├── map.tsx                  # Map view
     │   │   ├── camera.tsx               # Quick camera access
-    │   │   └── profile.tsx              # User profile
+    │   │   └── settings.tsx             # App settings
     │   ├── log/
     │   │   ├── step1.tsx                # Photo + restaurant picker
     │   │   ├── step2.tsx                # AI menu detection results
@@ -118,6 +120,19 @@ IHaveBeenHere/
 - [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - [Expo Go](https://expo.dev/go) on your phone (or Xcode for iOS Simulator)
 - A [Google AI API key](https://aistudio.google.com/apikey)
+- A [Supabase](https://supabase.com) project
+
+---
+
+### Supabase Setup
+
+1. Create a new Supabase project
+2. In **Storage**, create a public bucket named `meal-images`
+3. Go to **Project Settings → API** and copy:
+   - **Project URL** → `SUPABASE_URL`
+   - **service_role** secret key → `SUPABASE_SERVICE_KEY`
+4. Go to **Project Settings → Database** and copy the connection string → `DATABASE_URL`
+   - Use the `postgresql+asyncpg://` format
 
 ---
 
@@ -126,9 +141,9 @@ IHaveBeenHere/
 ```bash
 cd backend
 
-# Create .env
+# Create .env from example
 cp .env.example .env
-# Edit .env and set your GOOGLE_API_KEY
+# Fill in your keys (see Environment Variables below)
 
 # Install dependencies and run
 uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -136,13 +151,6 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 The API will be available at `http://localhost:8000`.
 Interactive docs: `http://localhost:8000/docs`
-
-**`.env` file:**
-```env
-DATABASE_URL=sqlite+aiosqlite:///./food_log.db
-GOOGLE_API_KEY=your_google_ai_api_key_here
-GOOGLE_GENAI_USE_VERTEXAI=FALSE
-```
 
 ---
 
@@ -153,15 +161,19 @@ cd frontend
 
 npm install
 
-# For local development (replace with your machine's IP)
-API_URL=http://YOUR_LOCAL_IP:8000 npx expo start
+# Set your machine's local IP in frontend/.env
+# (required when testing on a real device)
+echo "API_URL=http://YOUR_LOCAL_IP:8000" > .env
+echo "APP_ENV=development" >> .env
+
+npx expo start --clear
 ```
 
 - Press `i` — open iOS Simulator (requires Xcode)
 - Press `a` — open Android emulator
 - Scan the QR code — open in Expo Go on your phone
 
-> Your phone and computer must be on the **same Wi-Fi network**.
+> Your phone and Mac must be on the **same Wi-Fi network** when using a real device.
 
 ---
 
@@ -169,8 +181,11 @@ API_URL=http://YOUR_LOCAL_IP:8000 npx expo start
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/meals` | List all logged meals |
+| `GET` | `/meals` | List meals (supports `from_date`, `to_date`, `skip`, `limit`) |
 | `POST` | `/meals` | Create a new meal (multipart with image) |
+| `GET` | `/meals/{id}` | Get a single meal |
+| `PUT` | `/meals/{id}` | Update rating/review |
+| `DELETE` | `/meals/{id}` | Delete a meal |
 | `POST` | `/meals/detect-menu` | Upload photo → AI returns menu candidates |
 | `POST` | `/meals/generate-reviews` | Menu + rating + photo → AI review options |
 | `GET` | `/restaurants` | List restaurants |
@@ -185,13 +200,15 @@ API_URL=http://YOUR_LOCAL_IP:8000 npx expo start
 | Variable | Required | Description |
 |---|---|---|
 | `GOOGLE_API_KEY` | Yes | Google AI Studio API key |
-| `DATABASE_URL` | No | SQLite URL (defaults to `food_log.db`) |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | Yes | Supabase service_role secret key |
+| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+asyncpg://...`) |
 | `GOOGLE_GENAI_USE_VERTEXAI` | No | Set `TRUE` to use Vertex AI instead |
 
 ### Frontend (`frontend/.env`)
 | Variable | Default | Description |
 |---|---|---|
-| `API_URL` | `http://localhost:8000` | Backend base URL |
+| `API_URL` | `http://localhost:8000` | Backend base URL (use local IP for real devices) |
 | `APP_ENV` | `development` | `development` / `staging` / `production` |
 
 ---

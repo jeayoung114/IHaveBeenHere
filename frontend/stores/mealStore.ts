@@ -20,6 +20,7 @@ interface MealState {
   fetchMeals: () => Promise<void>;
   addMeal: (meal: Meal) => void;
   deleteMeal: (id: number) => Promise<void>;
+  clearMeals: () => void;
 }
 
 const DEFAULT_STATS: MealStats = {
@@ -62,6 +63,7 @@ export const useMealStore = create<MealState>()(
           },
         }));
       },
+      clearMeals: () => set({ meals: [], stats: DEFAULT_STATS }),
     }),
     {
       name: 'meal-store',

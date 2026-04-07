@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from supabase import create_client, Client
 
+from auth import get_current_user_id
 from database import get_db
 from models import Meal, Restaurant
 from schemas import (
@@ -156,6 +157,7 @@ async def create_meal(
     image: Optional[UploadFile] = File(None),
     existing_image_path: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Create a new meal record.
@@ -200,6 +202,7 @@ async def create_meal(
 
     meal = Meal(
         restaurant_id=restaurant.id,
+        user_id=user_id,
         menu_name=menu_name,
         rating=int(rating) if rating is not None else None,
         review=review,
@@ -230,9 +233,16 @@ async def list_meals(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """Return paginated list of meals (newest first) with aggregate stats."""
-    query = select(Meal).order_by(desc(Meal.created_at)).offset(skip).limit(limit)
+    query = (
+        select(Meal)
+        .where(Meal.user_id == user_id)
+        .order_by(desc(Meal.created_at))
+        .offset(skip)
+        .limit(limit)
+    )
     if from_date:
         dt = datetime.fromisoformat(from_date).replace(hour=0, minute=0, second=0, microsecond=0)
         query = query.where(Meal.created_at >= dt)
@@ -246,16 +256,20 @@ async def list_meals(
     for meal in meals:
         await db.refresh(meal, ["restaurant"])
 
-    # Stats
-    total_meals_result = await db.execute(select(func.count(Meal.id)))
+    # Stats — scoped to the current user
+    total_meals_result = await db.execute(
+        select(func.count(Meal.id)).where(Meal.user_id == user_id)
+    )
     total_meals = total_meals_result.scalar() or 0
 
     total_restaurants_result = await db.execute(
-        select(func.count(func.distinct(Meal.restaurant_id)))
+        select(func.count(func.distinct(Meal.restaurant_id))).where(Meal.user_id == user_id)
     )
     total_restaurants = total_restaurants_result.scalar() or 0
 
-    avg_rating_result = await db.execute(select(func.avg(Meal.rating)))
+    avg_rating_result = await db.execute(
+        select(func.avg(Meal.rating)).where(Meal.user_id == user_id)
+    )
     avg_rating_raw = avg_rating_result.scalar()
     avg_rating = round(float(avg_rating_raw), 2) if avg_rating_raw is not None else None
 
@@ -272,12 +286,18 @@ async def list_meals(
 # --- GET /meals/{id} ---
 
 @router.get("/{meal_id}", response_model=MealResponse)
-async def get_meal(meal_id: int, db: AsyncSession = Depends(get_db)):
+async def get_meal(
+    meal_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     """Return a single meal by ID."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found.")
+    if meal.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access forbidden.")
     await db.refresh(meal, ["restaurant"])
     return MealResponse.from_orm_with_url(meal)
 
@@ -289,12 +309,15 @@ async def update_meal(
     meal_id: int,
     body: MealUpdate,
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """Update rating and/or review for a meal."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found.")
+    if meal.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access forbidden.")
 
     if body.rating is not None:
         meal.rating = body.rating
@@ -309,11 +332,17 @@ async def update_meal(
 # --- DELETE /meals/{id} ---
 
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_meal(meal_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_meal(
+    meal_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     """Delete a meal by ID."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found.")
+    if meal.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access forbidden.")
     await db.delete(meal)
     await db.commit()

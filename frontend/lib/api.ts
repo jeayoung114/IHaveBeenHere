@@ -1,12 +1,20 @@
 import { env } from './env';
+import { supabase } from './supabase';
 
 const BASE_URL = env.API_URL;
 
 // ngrok free tier injects a browser warning page for non-browser requests.
 // This header bypasses it.
-const BASE_HEADERS: Record<string, string> = {
-  'ngrok-skip-browser-warning': '1',
-};
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const headers: Record<string, string> = { 'ngrok-skip-browser-warning': '1' };
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
 
 export interface NearbyRestaurant {
   name: string;
@@ -64,11 +72,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
-  getMeals: (skip = 0, limit = 20, fromDate?: string, toDate?: string): Promise<MealsResponse> => {
+  getMeals: async (skip = 0, limit = 20, fromDate?: string, toDate?: string): Promise<MealsResponse> => {
     let url = `${BASE_URL}/meals?skip=${skip}&limit=${limit}`;
     if (fromDate) url += `&from_date=${fromDate}`;
     if (toDate) url += `&to_date=${toDate}`;
-    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<MealsResponse>(r));
+    const headers = await getAuthHeaders();
+    return fetch(url, { headers }).then((r) => handleResponse<MealsResponse>(r));
   },
 
   detectMenu: async (
@@ -83,24 +92,26 @@ export const api = {
     if (sessionId) {
       form.append('session_id', sessionId);
     }
+    // detect-menu does not require auth (no DB access)
     const response = await fetch(`${BASE_URL}/meals/detect-menu`, {
       method: 'POST',
-      headers: BASE_HEADERS,
+      headers: { 'ngrok-skip-browser-warning': '1' },
       body: form,
     });
     return handleResponse<DetectMenuResponse>(response);
   },
 
-  generateReviews: (
+  generateReviews: async (
     menuName: string,
     restaurantName: string,
     rating: number,
     sessionId?: string,
     imagePath?: string,
-  ): Promise<GenerateReviewsResponse> =>
-    fetch(`${BASE_URL}/meals/generate-reviews`, {
+  ): Promise<GenerateReviewsResponse> => {
+    // generate-reviews does not require auth (no DB access)
+    const response = await fetch(`${BASE_URL}/meals/generate-reviews`, {
       method: 'POST',
-      headers: { ...BASE_HEADERS, 'Content-Type': 'application/json' },
+      headers: { 'ngrok-skip-browser-warning': '1', 'Content-Type': 'application/json' },
       body: JSON.stringify({
         menu_name: menuName,
         restaurant_name: restaurantName,
@@ -108,46 +119,59 @@ export const api = {
         session_id: sessionId ?? null,
         image_path: imagePath ?? null,
       }),
-    }).then((r) => handleResponse<GenerateReviewsResponse>(r)),
+    });
+    return handleResponse<GenerateReviewsResponse>(response);
+  },
 
-  createMeal: (formData: FormData): Promise<Meal> =>
-    fetch(`${BASE_URL}/meals`, { method: 'POST', headers: BASE_HEADERS, body: formData }).then((r) =>
+  createMeal: async (formData: FormData): Promise<Meal> => {
+    const headers = await getAuthHeaders();
+    return fetch(`${BASE_URL}/meals`, { method: 'POST', headers, body: formData }).then((r) =>
       handleResponse<Meal>(r),
-    ),
+    );
+  },
 
-  searchMeals: (q: string): Promise<Meal[]> =>
-    fetch(`${BASE_URL}/search?q=${encodeURIComponent(q)}`, { headers: BASE_HEADERS }).then((r) =>
+  searchMeals: async (q: string): Promise<Meal[]> => {
+    const headers = await getAuthHeaders();
+    return fetch(`${BASE_URL}/search?q=${encodeURIComponent(q)}`, { headers }).then((r) =>
       handleResponse<Meal[]>(r),
-    ),
+    );
+  },
 
-  getRestaurants: (name?: string): Promise<Restaurant[]> => {
+  getRestaurants: async (name?: string): Promise<Restaurant[]> => {
     const url = name
       ? `${BASE_URL}/restaurants?name=${encodeURIComponent(name)}`
       : `${BASE_URL}/restaurants`;
-    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<Restaurant[]>(r));
+    const headers = await getAuthHeaders();
+    return fetch(url, { headers }).then((r) => handleResponse<Restaurant[]>(r));
   },
 
-  searchNearbyRestaurants: (q: string, lat?: number, lng?: number): Promise<NearbyRestaurant[]> => {
+  searchNearbyRestaurants: async (q: string, lat?: number, lng?: number): Promise<NearbyRestaurant[]> => {
     let url = `${BASE_URL}/restaurants/search-nearby?q=${encodeURIComponent(q)}`;
     if (lat != null && lng != null) url += `&lat=${lat}&lng=${lng}`;
-    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<NearbyRestaurant[]>(r));
+    const headers = await getAuthHeaders();
+    return fetch(url, { headers }).then((r) => handleResponse<NearbyRestaurant[]>(r));
   },
 
-  getRestaurantMenus: (restaurantName: string, sessionId?: string): Promise<string[]> => {
+  getRestaurantMenus: async (restaurantName: string, sessionId?: string): Promise<string[]> => {
     let url = `${BASE_URL}/restaurants/menus?name=${encodeURIComponent(restaurantName)}`;
     if (sessionId) {
       url += `&session_id=${encodeURIComponent(sessionId)}`;
     }
-    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<string[]>(r));
+    const headers = await getAuthHeaders();
+    return fetch(url, { headers }).then((r) => handleResponse<string[]>(r));
   },
 
-  deleteMeal: (id: number): Promise<void> =>
-    fetch(`${BASE_URL}/meals/${id}`, { method: 'DELETE', headers: BASE_HEADERS }).then((r) => {
+  deleteMeal: async (id: number): Promise<void> => {
+    const headers = await getAuthHeaders();
+    return fetch(`${BASE_URL}/meals/${id}`, { method: 'DELETE', headers }).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    }),
+    });
+  },
 
-  geocodeAllRestaurants: (): Promise<{ updated: number; total: number }> =>
-    fetch(`${BASE_URL}/restaurants/geocode-all`, { method: 'POST', headers: BASE_HEADERS }).then(
-      (r) => handleResponse<{ updated: number; total: number }>(r),
-    ),
+  geocodeAllRestaurants: async (): Promise<{ updated: number; total: number }> => {
+    const headers = await getAuthHeaders();
+    return fetch(`${BASE_URL}/restaurants/geocode-all`, { method: 'POST', headers }).then((r) =>
+      handleResponse<{ updated: number; total: number }>(r),
+    );
+  },
 };

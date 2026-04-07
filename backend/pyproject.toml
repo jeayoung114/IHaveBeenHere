@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "asyncpg>=0.31.0",
+    "pyjwt>=2.8.0",
     "supabase>=2.0.0",
     "fastapi>=0.135.3",
     "google-adk>=1.28.1",

@@ -20,6 +20,7 @@ class Meal(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
+    user_id = Column(String, nullable=True, index=True)
     menu_name = Column(String, nullable=False, index=True)
     rating = Column(Integer, nullable=True)   # 1-5
     review = Column(String, nullable=True)

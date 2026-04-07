@@ -9,6 +9,7 @@ import { APP_NAME, APP_VERSION } from '@/constants';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useMealStore } from '@/stores/mealStore';
+import { useAuthStore } from '@/stores/authStore';
 
 const THEME_OPTIONS = ['light', 'dark', 'system'] as const;
 type ThemeOption = (typeof THEME_OPTIONS)[number];
@@ -18,6 +19,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const colorScheme = useSettingsStore((s) => s.colorScheme);
   const setColorScheme = useSettingsStore((s) => s.setColorScheme);
   const stats = useMealStore((s) => s.stats);
+  const { user, signOut } = useAuthStore();
 
   const appVersion = Constants.expoConfig?.version ?? APP_VERSION;
   const avgRatingDisplay =
@@ -28,6 +30,18 @@ export default function ProfileScreen(): React.JSX.Element {
       <Text variant="h1" style={[styles.heading, { color: theme.colors.text }]}>
         SETTINGS
       </Text>
+
+      <Card style={{ marginBottom: theme.spacing.md }}>
+        <Text variant="h2" style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          Account
+        </Text>
+        <Text variant="body" style={[styles.aboutItem, { color: `${theme.colors.text}88` }]}>
+          {user?.email ?? '—'}
+        </Text>
+        <View style={{ marginTop: 12 }}>
+          <Button title="Sign Out" onPress={signOut} variant="outline" />
+        </View>
+      </Card>
 
       <Card style={{ marginBottom: theme.spacing.md }}>
         <Text variant="h2" style={[styles.sectionTitle, { color: theme.colors.text }]}>

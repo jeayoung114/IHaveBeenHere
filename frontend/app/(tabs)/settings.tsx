@@ -7,6 +7,7 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { APP_NAME } from '@/constants';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 const THEME_OPTIONS = ['light', 'dark', 'system'] as const;
@@ -15,6 +16,7 @@ export default function SettingsScreen(): React.JSX.Element {
   const { theme } = useTheme();
   const colorScheme = useSettingsStore((s) => s.colorScheme);
   const setColorScheme = useSettingsStore((s) => s.setColorScheme);
+  const { user, signOut } = useAuthStore();
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -23,6 +25,18 @@ export default function SettingsScreen(): React.JSX.Element {
       <Text variant="h1" style={styles.heading}>
         Settings
       </Text>
+
+      <Card style={{ marginBottom: theme.spacing.md }}>
+        <Text variant="h2" style={styles.sectionTitle}>
+          Account
+        </Text>
+        <Text variant="body" style={styles.aboutItem}>
+          {user?.email ?? '—'}
+        </Text>
+        <View style={{ marginTop: 12 }}>
+          <Button title="Sign Out" onPress={signOut} variant="outline" />
+        </View>
+      </Card>
 
       <Card style={{ marginBottom: theme.spacing.md }}>
         <Text variant="h2" style={styles.sectionTitle}>

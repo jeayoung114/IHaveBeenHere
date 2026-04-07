@@ -15,19 +15,15 @@ function ThemedStatusBar(): React.JSX.Element {
   return <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />;
 }
 
-function AuthGate(): null {
-  const router = useRouter();
-  const segments = useSegments();
-  const { session, isLoading, setSession } = useAuthStore();
+// Initializes the session — must always be mounted
+function SessionInitializer(): null {
+  const { setSession } = useAuthStore();
 
-  // Subscribe to Supabase auth state changes
   useEffect(() => {
-    // Get the initial session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
     });
 
-    // Listen for future auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
     });
@@ -37,17 +33,23 @@ function AuthGate(): null {
     };
   }, [setSession]);
 
-  // Handle navigation based on auth state
+  return null;
+}
+
+// Handles navigation after session is resolved
+function NavigationGate(): null {
+  const router = useRouter();
+  const segments = useSegments();
+  const { session, isLoading } = useAuthStore();
+
   useEffect(() => {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === 'auth';
 
     if (!session && !inAuthGroup) {
-      // Not signed in — redirect to login
       router.replace('/auth/login');
     } else if (session && inAuthGroup) {
-      // Signed in but still on auth screen — redirect to app
       router.replace('/');
     }
   }, [session, isLoading, segments, router]);
@@ -55,19 +57,34 @@ function AuthGate(): null {
   return null;
 }
 
+function AppContent(): React.JSX.Element {
+  const isLoading = useAuthStore((s) => s.isLoading);
+
+  useEffect(() => {
+    if (!isLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [isLoading]);
+
+  if (isLoading) return <></>;
+
+  return (
+    <>
+      <NavigationGate />
+      <Stack screenOptions={{ headerShown: false }} />
+      <ThemedStatusBar />
+    </>
+  );
+}
+
 export default function RootLayout(): React.JSX.Element {
   const colorScheme = useSettingsStore((s) => s.colorScheme);
   const setColorScheme = useSettingsStore((s) => s.setColorScheme);
 
-  useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
-
   return (
     <ThemeProvider colorSchemeMode={colorScheme} onColorSchemeModeChange={setColorScheme}>
-      <AuthGate />
-      <Stack screenOptions={{ headerShown: false }} />
-      <ThemedStatusBar />
+      <SessionInitializer />
+      <AppContent />
     </ThemeProvider>
   );
 }

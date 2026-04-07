@@ -6,6 +6,7 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import type { Meal } from '@/lib/api';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useAuthStore } from '@/stores/authStore';
 import { useMealStore } from '@/stores/mealStore';
 
 function StatItem({
@@ -45,14 +46,16 @@ function EmptyState(): React.JSX.Element {
 export default function TimelineScreen(): React.JSX.Element {
   const { theme } = useTheme();
   const { meals, isLoading, stats, fetchMeals } = useMealStore();
+  const { session } = useAuthStore();
 
   useEffect(() => {
+    if (!session) return;
     fetchMeals().catch((error: unknown) => {
       const message =
         error instanceof Error ? error.message : 'Failed to load meals';
       Alert.alert('Error', message);
     });
-  }, [fetchMeals]);
+  }, [fetchMeals, session]);
 
   const avgRatingDisplay =
     stats.avg_rating !== null ? stats.avg_rating.toFixed(1) : '--';

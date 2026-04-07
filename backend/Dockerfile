@@ -6,13 +6,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # Copy dependency files first for layer caching
-COPY pyproject.toml uv.lock ./
+# Build context is repo root, so reference backend/ explicitly
+COPY backend/pyproject.toml backend/uv.lock ./
 
 # Install dependencies (no dev deps, frozen lockfile)
 RUN uv sync --frozen --no-dev
 
 # Copy application code
-COPY . .
+COPY backend/ .
 
 # Railway injects PORT at runtime; default to 8000 locally
 EXPOSE 8000

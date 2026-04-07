@@ -1,13 +1,16 @@
+import asyncio
 import json
 import uuid
 import os
 import httpx
+from datetime import datetime
 from typing import Optional
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
+from supabase import create_client, Client
 
 from database import get_db
 from models import Meal, Restaurant
@@ -24,19 +27,33 @@ from services import ai_service
 
 router = APIRouter(prefix="/meals", tags=["meals"])
 
-UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
-UPLOADS_DIR.mkdir(exist_ok=True)
+STORAGE_BUCKET = "meal-images"
+
+_supabase: Optional[Client] = None
+
+
+def _get_supabase() -> Client:
+    global _supabase
+    if _supabase is None:
+        url = os.environ.get("SUPABASE_URL", "")
+        key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        _supabase = create_client(url, key)
+    return _supabase
 
 
 async def _save_image(image: UploadFile) -> str:
-    """Save uploaded image to uploads/ and return relative path."""
+    """Upload image to Supabase Storage and return public URL."""
     ext = os.path.splitext(image.filename or "image.jpg")[1] or ".jpg"
     filename = f"meal_{uuid.uuid4().hex}{ext}"
-    file_path = UPLOADS_DIR / filename
     content = await image.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
-    return str(file_path)
+    sb = _get_supabase()
+    sb.storage.from_(STORAGE_BUCKET).upload(
+        path=filename,
+        file=content,
+        file_options={"content-type": image.content_type or "image/jpeg"},
+    )
+    public_url = sb.storage.from_(STORAGE_BUCKET).get_public_url(filename)
+    return public_url
 
 
 async def _geocode(name: str) -> tuple[float, float] | None:
@@ -62,15 +79,27 @@ async def _get_or_create_restaurant(db: AsyncSession, name: str) -> Restaurant:
     )
     restaurant = result.scalars().first()
     if not restaurant:
-        coords = await _geocode(name)
-        restaurant = Restaurant(
-            name=name,
-            latitude=coords[0] if coords else None,
-            longitude=coords[1] if coords else None,
-        )
+        restaurant = Restaurant(name=name, latitude=None, longitude=None)
         db.add(restaurant)
         await db.flush()
+        # Geocode in background — don't block the response
+        asyncio.create_task(_geocode_and_update(restaurant.id, name))
     return restaurant
+
+
+async def _geocode_and_update(restaurant_id: int, name: str) -> None:
+    """Geocode in background and update the restaurant record."""
+    coords = await _geocode(name)
+    if not coords:
+        return
+    from database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Restaurant).where(Restaurant.id == restaurant_id))
+        restaurant = result.scalars().first()
+        if restaurant:
+            restaurant.latitude = coords[0]
+            restaurant.longitude = coords[1]
+            await db.commit()
 
 
 # --- POST /meals/detect-menu (must be defined before /{id} routes) ---
@@ -123,13 +152,14 @@ async def generate_reviews(body: GenerateReviewsRequest):
 
 @router.post("", response_model=MealResponse, status_code=status.HTTP_201_CREATED)
 async def create_meal(
-    image: UploadFile = File(...),
     data: str = Form(...),
+    image: Optional[UploadFile] = File(None),
+    existing_image_path: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Create a new meal record.
-    Accepts multipart form: image file + data (JSON string).
+    Accepts multipart form: data (JSON string) + either image file or existing_image_path.
     """
     try:
         meal_data = json.loads(data)
@@ -152,8 +182,13 @@ async def create_meal(
     if rating is not None and not (1 <= int(rating) <= 5):
         raise HTTPException(status_code=422, detail="rating must be between 1 and 5.")
 
-    # Save image
-    image_path = await _save_image(image)
+    # Use existing image path or save uploaded image
+    if existing_image_path:
+        image_path = existing_image_path
+    elif image is not None:
+        image_path = await _save_image(image)
+    else:
+        raise HTTPException(status_code=422, detail="Either image or existing_image_path is required.")
 
     # Get or create restaurant
     restaurant = await _get_or_create_restaurant(db, restaurant_name)
@@ -192,13 +227,19 @@ async def create_meal(
 async def list_meals(
     skip: int = 0,
     limit: int = 20,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Return paginated list of meals (newest first) with aggregate stats."""
-    # Fetch meals
-    result = await db.execute(
-        select(Meal).order_by(desc(Meal.created_at)).offset(skip).limit(limit)
-    )
+    query = select(Meal).order_by(desc(Meal.created_at)).offset(skip).limit(limit)
+    if from_date:
+        dt = datetime.fromisoformat(from_date).replace(hour=0, minute=0, second=0, microsecond=0)
+        query = query.where(Meal.created_at >= dt)
+    if to_date:
+        dt = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, microsecond=999999)
+        query = query.where(Meal.created_at <= dt)
+    result = await db.execute(query)
     meals = result.scalars().all()
 
     # Load restaurant for each meal
@@ -209,7 +250,9 @@ async def list_meals(
     total_meals_result = await db.execute(select(func.count(Meal.id)))
     total_meals = total_meals_result.scalar() or 0
 
-    total_restaurants_result = await db.execute(select(func.count(Restaurant.id)))
+    total_restaurants_result = await db.execute(
+        select(func.count(func.distinct(Meal.restaurant_id)))
+    )
     total_restaurants = total_restaurants_result.scalar() or 0
 
     avg_rating_result = await db.execute(select(func.avg(Meal.rating)))

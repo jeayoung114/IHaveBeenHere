@@ -43,7 +43,7 @@ export function MealCard({ meal }: MealCardProps): React.JSX.Element {
 
   const imageUrl =
     meal.image_url != null
-      ? meal.image_url.startsWith('http')
+      ? meal.image_url.startsWith('http') || meal.image_url.startsWith('file://')
         ? meal.image_url
         : `${env.API_URL}${meal.image_url}`
       : null;

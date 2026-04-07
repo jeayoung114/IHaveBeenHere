@@ -74,7 +74,10 @@ class MealResponse(BaseModel):
 
         image_url: Optional[str] = None
         if meal.image_path:
-            image_url = f"/uploads/{meal.image_path.split('uploads/')[-1]}"
+            if meal.image_path.startswith("http"):
+                image_url = meal.image_path
+            else:
+                image_url = f"/uploads/{meal.image_path.split('uploads/')[-1]}"
 
         return cls(
             id=meal.id,

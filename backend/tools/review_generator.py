@@ -66,19 +66,26 @@ def generate_meal_reviews(
 
         # Include image if provided for visual context
         if image_path:
-            image_file = Path(image_path)
-            if image_file.exists():
-                suffix = image_file.suffix.lower()
-                mime_map = {
-                    ".jpg": "image/jpeg",
-                    ".jpeg": "image/jpeg",
-                    ".png": "image/png",
-                    ".webp": "image/webp",
-                }
-                mime_type = mime_map.get(suffix, "image/jpeg")
-                contents.append(
-                    types.Part.from_bytes(data=image_file.read_bytes(), mime_type=mime_type)
-                )
+            try:
+                if image_path.startswith("http://") or image_path.startswith("https://"):
+                    import httpx
+                    r = httpx.get(image_path, timeout=10, follow_redirects=True)
+                    r.raise_for_status()
+                    img_bytes = r.content
+                    img_mime = r.headers.get("content-type", "image/jpeg").split(";")[0]
+                else:
+                    image_file = Path(image_path)
+                    if image_file.exists():
+                        suffix = image_file.suffix.lower()
+                        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+                        img_bytes = image_file.read_bytes()
+                        img_mime = mime_map.get(suffix, "image/jpeg")
+                    else:
+                        img_bytes = None
+                if img_bytes:
+                    contents.append(types.Part.from_bytes(data=img_bytes, mime_type=img_mime))
+            except Exception as img_err:
+                logger.warning("Could not load image for review context: %s", img_err)
 
         contents.append(prompt)
 

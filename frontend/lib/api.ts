@@ -64,10 +64,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
-  getMeals: (skip = 0, limit = 20): Promise<MealsResponse> =>
-    fetch(`${BASE_URL}/meals?skip=${skip}&limit=${limit}`, { headers: BASE_HEADERS }).then((r) =>
-      handleResponse<MealsResponse>(r),
-    ),
+  getMeals: (skip = 0, limit = 20, fromDate?: string, toDate?: string): Promise<MealsResponse> => {
+    let url = `${BASE_URL}/meals?skip=${skip}&limit=${limit}`;
+    if (fromDate) url += `&from_date=${fromDate}`;
+    if (toDate) url += `&to_date=${toDate}`;
+    return fetch(url, { headers: BASE_HEADERS }).then((r) => handleResponse<MealsResponse>(r));
+  },
 
   detectMenu: async (
     imageUri: string,

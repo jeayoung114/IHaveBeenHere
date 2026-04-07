@@ -18,6 +18,7 @@ interface RouteParams {
   rating: string;
   review: string;
   sessionId: string;
+  imagePath: string;
 }
 
 export default function Step4Screen(): React.JSX.Element {
@@ -26,7 +27,7 @@ export default function Step4Screen(): React.JSX.Element {
   const params = useLocalSearchParams() as unknown as RouteParams;
   const addMeal = useMealStore((s) => s.addMeal);
 
-  const { imageUri, restaurantName, menuName, rating: ratingStr, review } = params;
+  const { imageUri, restaurantName, menuName, rating: ratingStr, review, imagePath } = params;
   const rating = ratingStr ? parseInt(ratingStr, 10) : 0;
 
   const [isSaving, setIsSaving] = useState(false);
@@ -57,8 +58,6 @@ export default function Step4Screen(): React.JSX.Element {
     setIsSaving(true);
     try {
       const formData = new FormData();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      formData.append('image', { uri: imageUri, type: 'image/jpeg', name: 'photo.jpg' } as any);
 
       const mealData: Record<string, unknown> = {
         menu_name: menuName,
@@ -71,6 +70,14 @@ export default function Step4Screen(): React.JSX.Element {
         mealData.review = review;
       }
       formData.append('data', JSON.stringify(mealData));
+
+      // Reuse server-side image from detect-menu step if available, otherwise upload
+      if (imagePath && imagePath.length > 0) {
+        formData.append('existing_image_path', imagePath);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formData.append('image', { uri: imageUri, type: 'image/jpeg', name: 'photo.jpg' } as any);
+      }
 
       const savedMeal = await api.createMeal(formData);
       addMeal(savedMeal);

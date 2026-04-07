@@ -72,6 +72,7 @@ export default function Step3Screen(): React.JSX.Element {
         rating: String(rating),
         review: selectedReview ?? '',
         sessionId: sessionId ?? '',
+        imagePath: imagePath ?? '',
       },
     });
   };

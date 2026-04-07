@@ -13,6 +13,22 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _load_image_bytes(image_path: str) -> tuple[bytes, str]:
+    """Load image bytes and mime type from a local path or https:// URL."""
+    if image_path.startswith("http://") or image_path.startswith("https://"):
+        import httpx
+        r = httpx.get(image_path, timeout=10, follow_redirects=True)
+        r.raise_for_status()
+        content_type = r.headers.get("content-type", "image/jpeg").split(";")[0]
+        return r.content, content_type
+    image_file = Path(image_path)
+    if not image_file.exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    suffix = image_file.suffix.lower()
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+    return image_file.read_bytes(), mime_map.get(suffix, "image/jpeg")
+
+
 def identify_menu_from_image_grounded(image_path: str, restaurant_name: str) -> dict:
     """
     Identifies the exact menu item name from a food photo using vision + web search.
@@ -20,7 +36,7 @@ def identify_menu_from_image_grounded(image_path: str, restaurant_name: str) -> 
     to find the closest matching item name.
 
     Args:
-        image_path: Absolute local path to the food image file
+        image_path: Local path or https:// URL to the food image
         restaurant_name: Name of the restaurant where the photo was taken
 
     Returns:
@@ -30,9 +46,10 @@ def identify_menu_from_image_grounded(image_path: str, restaurant_name: str) -> 
     if not api_key or api_key == "PLACEHOLDER_SET_YOUR_KEY":
         return {"candidates": []}
 
-    image_file = Path(image_path)
-    if not image_file.exists():
-        logger.warning("Image not found: %s", image_path)
+    try:
+        image_bytes, mime_type = _load_image_bytes(image_path)
+    except Exception as e:
+        logger.warning("Failed to load image %s: %s", image_path, e)
         return {"candidates": []}
 
     try:
@@ -40,17 +57,6 @@ def identify_menu_from_image_grounded(image_path: str, restaurant_name: str) -> 
         from google.genai import types
 
         client = genai.Client(api_key=api_key)
-
-        suffix = image_file.suffix.lower()
-        mime_map = {
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".webp": "image/webp",
-            ".gif": "image/gif",
-        }
-        mime_type = mime_map.get(suffix, "image/jpeg")
-        image_bytes = image_file.read_bytes()
 
         prompt = (
             f"Look at this food photo taken at '{restaurant_name}'. "

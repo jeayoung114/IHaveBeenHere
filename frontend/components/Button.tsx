@@ -58,12 +58,12 @@ export function Button({
 const styles = StyleSheet.create({
   button: {
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   disabled: {

@@ -71,7 +71,8 @@ async def search_nearby_restaurants(
         params["lat"] = lat
         params["lon"] = lng
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
+        headers = {"User-Agent": "IHaveBeenHere/1.0 (restaurant search)"}
+        async with httpx.AsyncClient(timeout=5, headers=headers) as client:
             r = await client.get("https://photon.komoot.io/api/", params=params)
             data = r.json()
         results = []

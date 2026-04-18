@@ -6,12 +6,14 @@ const BASE_URL = env.API_URL;
 // ngrok free tier injects a browser warning page for non-browser requests.
 // This header bypasses it.
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
   const headers: Record<string, string> = { 'ngrok-skip-browser-warning': '1' };
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  } catch {
+    // Non-fatal — proceed without auth header
   }
   return headers;
 }

@@ -29,6 +29,7 @@ export default function Step1Screen(): React.JSX.Element {
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const userCoords = useRef<{ lat: number; lng: number } | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -79,22 +80,22 @@ export default function Step1Screen(): React.JSX.Element {
     }
   };
 
-  const handleRestaurantChange = async (text: string): Promise<void> => {
+  const handleRestaurantChange = (text: string): void => {
     setRestaurantName(text);
     setShowSuggestions(text.length > 1);
+    if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (text.length > 1) {
       setIsFetchingSuggestions(true);
-      try {
+      debounceTimer.current = setTimeout(() => {
         const coords = userCoords.current;
-        const data = await api.searchNearbyRestaurants(text, coords?.lat, coords?.lng);
-        setSuggestions(data);
-      } catch {
-        setSuggestions([]);
-      } finally {
-        setIsFetchingSuggestions(false);
-      }
+        api.searchNearbyRestaurants(text, coords?.lat, coords?.lng)
+          .then((data) => { setSuggestions(data); })
+          .catch(() => { setSuggestions([]); })
+          .finally(() => { setIsFetchingSuggestions(false); });
+      }, 500);
     } else {
       setSuggestions([]);
+      setIsFetchingSuggestions(false);
     }
   };
 
@@ -187,7 +188,7 @@ export default function Step1Screen(): React.JSX.Element {
         </Text>
         <TextInput
           value={restaurantName}
-          onChangeText={(text) => { void handleRestaurantChange(text); }}
+          onChangeText={handleRestaurantChange}
           placeholder="e.g. Ichiran Ramen"
           placeholderTextColor={`${theme.colors.text}44`}
           style={[

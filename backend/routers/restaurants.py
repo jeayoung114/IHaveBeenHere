@@ -65,38 +65,34 @@ async def search_nearby_restaurants(
     lat: Optional[float] = Query(None),
     lng: Optional[float] = Query(None),
 ):
-    """Search real restaurants by name near a location via Nominatim."""
-    params: dict = {
-        "q": q,
-        "format": "json",
-        "limit": 8,
-        "addressdetails": 1,
-    }
+    """Search restaurants by name via Photon (OSM-based, komoot.io)."""
+    params: dict = {"q": q, "limit": 8}
     if lat is not None and lng is not None:
-        params["viewbox"] = f"{lng-0.1},{lat+0.1},{lng+0.1},{lat-0.1}"
-        params["bounded"] = 0
-    headers = {"User-Agent": "IHaveBeenHere/1.0"}
+        params["lat"] = lat
+        params["lon"] = lng
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(
-                "https://nominatim.openstreetmap.org/search", params=params, headers=headers
-            )
+            r = await client.get("https://photon.komoot.io/api/", params=params)
             data = r.json()
         results = []
-        for item in data:
-            addr = item.get("address", {})
+        for feature in data.get("features", []):
+            props = feature.get("properties", {})
+            name = props.get("name", "")
+            if not name:
+                continue
+            coords = feature.get("geometry", {}).get("coordinates", [None, None])
             parts = [
-                addr.get("road") or addr.get("pedestrian"),
-                addr.get("city") or addr.get("town") or addr.get("village"),
-                addr.get("state"),
+                props.get("street"),
+                props.get("city") or props.get("town") or props.get("village"),
+                props.get("state"),
             ]
             address = ", ".join(p for p in parts if p)
             results.append({
-                "name": item.get("display_name", "").split(",")[0],
-                "display_name": item.get("display_name", ""),
+                "name": name,
+                "display_name": f"{name}, {address}" if address else name,
                 "address": address,
-                "lat": float(item["lat"]),
-                "lng": float(item["lon"]),
+                "lat": float(coords[1]) if coords[1] is not None else 0.0,
+                "lng": float(coords[0]) if coords[0] is not None else 0.0,
             })
         return results
     except Exception:

@@ -33,7 +33,7 @@ module.exports = {
       output: 'static',
       favicon: './assets/images/favicon.png',
     },
-    plugins: ['expo-router', 'expo-secure-store', 'expo-updates'],
+    plugins: ['expo-router', 'expo-secure-store', 'expo-updates', 'expo-web-browser'],
     experiments: {
       typedRoutes: true,
     },

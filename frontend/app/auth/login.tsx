@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
@@ -12,13 +12,14 @@ type Mode = 'login' | 'signup';
 
 export default function LoginScreen(): React.JSX.Element {
   const { theme } = useTheme();
-  const { signIn, signUp } = useAuthStore();
+  const { signIn, signUp, signInWithGoogle } = useAuthStore();
 
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
 
   const handleSubmit = async () => {
@@ -43,6 +44,18 @@ export default function LoginScreen(): React.JSX.Element {
       setErrorMessage(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setIsOAuthLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Google sign-in failed.');
+    } finally {
+      setIsOAuthLoading(false);
     }
   };
 
@@ -160,9 +173,37 @@ export default function LoginScreen(): React.JSX.Element {
             title={mode === 'login' ? 'Sign In' : 'Create Account'}
             onPress={handleSubmit}
             loading={isLoading}
-            disabled={isLoading}
+            disabled={isLoading || isOAuthLoading}
           />
         </View>
+
+        {/* Divider */}
+        <View style={styles.dividerRow}>
+          <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+          <Text variant="caption" style={{ color: theme.colors.border, marginHorizontal: 8 }}>
+            or
+          </Text>
+          <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+        </View>
+
+        {/* Google OAuth */}
+        <Pressable
+          style={[
+            styles.oauthButton,
+            { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            (isLoading || isOAuthLoading) && { opacity: 0.6 },
+          ]}
+          onPress={handleGoogleSignIn}
+          disabled={isLoading || isOAuthLoading}
+        >
+          {isOAuthLoading ? (
+            <ActivityIndicator size="small" color={theme.colors.text} />
+          ) : (
+            <Text variant="body" style={{ color: theme.colors.text, fontWeight: '600' }}>
+              Continue with Google
+            </Text>
+          )}
+        </Pressable>
 
         {/* Toggle mode link */}
         <Pressable onPress={mode === 'login' ? switchToSignUp : switchToLogin} style={styles.toggleRow}>
@@ -179,8 +220,8 @@ export default function LoginScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     paddingTop: 48,
+    paddingBottom: 32,
     gap: 16,
   },
   title: {
@@ -216,5 +257,21 @@ const styles = StyleSheet.create({
   toggleRow: {
     alignItems: 'center',
     marginTop: 4,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  oauthButton: {
+    height: 48,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
